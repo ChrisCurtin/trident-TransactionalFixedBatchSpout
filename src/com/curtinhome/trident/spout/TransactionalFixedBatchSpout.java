@@ -7,6 +7,8 @@ import storm.trident.operation.TridentCollector;
 import storm.trident.spout.IPartitionedTridentSpout;
 import storm.trident.topology.TransactionAttempt;
 
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +20,7 @@ import java.util.Map;
  * different data per partition and even different sizes of data per partition
  *
  */
-public class TransactionalFixedBatchSpout implements IPartitionedTridentSpout<Map> {
+public class TransactionalFixedBatchSpout implements IPartitionedTridentSpout<Integer, FixedBatchPartitionId, Map> {
 
     private List<List<Values>> m_data;
     private Fields m_outputFields;
@@ -32,9 +34,9 @@ public class TransactionalFixedBatchSpout implements IPartitionedTridentSpout<Ma
     }
 
 
-    class Coordinator implements IPartitionedTridentSpout.Coordinator {
+    class Coordinator implements IPartitionedTridentSpout.Coordinator<Integer> {
         @Override
-        public long numPartitions() {
+        public Integer getPartitionsForBatch() {
             return m_data.size();
         }
 
@@ -49,16 +51,21 @@ public class TransactionalFixedBatchSpout implements IPartitionedTridentSpout<Ma
         }
     }
 
-    class Emitter implements IPartitionedTridentSpout.Emitter<Map> {
+    class Emitter implements IPartitionedTridentSpout.Emitter<Integer, FixedBatchPartitionId, Map> {
 
-        public Emitter() {
-
+        @Override
+        public List<FixedBatchPartitionId> getOrderedPartitions(Integer partitions) {
+            List<FixedBatchPartitionId> rtn = new ArrayList<FixedBatchPartitionId>(partitions);
+            for (int i=0; i<partitions;i++) {
+                rtn.add(new FixedBatchPartitionId(i));
+            }
+            return rtn;
         }
 
         @Override
-        public Map emitPartitionBatchNew(TransactionAttempt a_attempt, TridentCollector a_collector, int a_partition, Map a_lastMeta) {
+        public Map emitPartitionBatchNew(TransactionAttempt a_attempt, TridentCollector a_collector, FixedBatchPartitionId a_partition, Map a_lastMeta) {
             Map<String, Integer> newMeta = new HashMap<String, Integer>();
-            List<Values> data = m_data.get(a_partition);
+            List<Values> data = m_data.get(a_partition.partition);
 
             int currentBlock = 0;
             if (a_lastMeta != null) {
@@ -78,14 +85,19 @@ public class TransactionalFixedBatchSpout implements IPartitionedTridentSpout<Ma
         }
 
         @Override
-        public void emitPartitionBatch(TransactionAttempt a_attempt, TridentCollector a_collector, int a_partition, Map a_meta) {
+        public void emitPartitionBatch(TransactionAttempt a_attempt, TridentCollector a_collector, FixedBatchPartitionId a_partition, Map a_meta) {
             int currentBlock = (Integer) a_meta.get("currentBlock");
-            List<Values> data = m_data.get(a_partition);
+            List<Values> data = m_data.get(a_partition.partition);
             emit(a_collector, data, currentBlock);
         }
 
         @Override
         public void close() {
+
+        }
+
+        @Override
+        public void refreshPartitions(List<FixedBatchPartitionId> list) {
 
         }
 
@@ -101,12 +113,12 @@ public class TransactionalFixedBatchSpout implements IPartitionedTridentSpout<Ma
 
 
     @Override
-    public IPartitionedTridentSpout.Coordinator getCoordinator(Map conf, TopologyContext context) {
+    public IPartitionedTridentSpout.Coordinator<Integer> getCoordinator(Map conf, TopologyContext context) {
         return new Coordinator();
     }
 
     @Override
-    public IPartitionedTridentSpout.Emitter<Map> getEmitter(Map conf, TopologyContext context) {
+    public IPartitionedTridentSpout.Emitter<Integer, FixedBatchPartitionId, Map> getEmitter(Map conf, TopologyContext context) {
         return new Emitter();
     }
 
