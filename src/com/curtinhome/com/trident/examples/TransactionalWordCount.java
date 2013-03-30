@@ -106,7 +106,7 @@ public class TransactionalWordCount {
            TransactionalFixedBatchSpout spout =  makeTransactionalSpout();
         TridentTopology topology = new TridentTopology();
 
-        TridentState ppState = topology.newStream("PPSpout", spout)
+        TridentState ppState = topology.newStream("PPSpout990", spout)
                 .parallelismHint(16)
                 .each(new Fields("sentence"), new Split(), new Fields("word"))
                 .shuffle()
